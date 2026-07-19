@@ -35,21 +35,26 @@ wasim-fbr-notification-app/
 
 ---
 
-## 💻 How to Run
+## 💻 How to Run & Distribute
 
-Since the application uses Python's standard libraries, there are **no external dependencies** (like `beautifulsoup4` or `requests`) to install.
+There are two ways to run the application:
 
-### Prerequisites
-Make sure Python 3 is installed on your computer.
+### Option A: Standalone Executable (`.exe`) - *Recommended for sharing*
+If you compile the application (or receive the compiled `FBRNotificationMonitor.exe` from `dist/` directory):
+* **Zero Prerequisites**: The recipient **does not** need Python, Git, or any other software installed on their Windows PC.
+* **Self-Contained**: The `.exe` contains the Python interpreter, visual libraries, and scripts packaged into a single double-clickable file.
+* **Auto Startup**: The very first time the recipient double-clicks the `.exe`, it will automatically register itself with their Windows Startup.
+* **How to share**: Just send the `FBRNotificationMonitor.exe` file directly to them via email, USB, or file sharing.
 
-### Quick Start
-1. Clone the repository:
+### Option B: Running from Source Code (Python)
+If you want to run the application directly from the source code:
+1. **Prerequisites**: Make sure Python 3.x is installed on your computer.
+2. Clone the repository:
    ```bash
    git clone https://github.com/mwasimmit/wasim-fbr-notification-app.git
    cd wasim-fbr-notification-app
    ```
-
-2. Run the application:
+3. Run the application:
    ```bash
    python monitor_app.py
    ```
