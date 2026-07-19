@@ -25,3 +25,9 @@ venv.bak/
 *.sln
 *.swp
 *~
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+

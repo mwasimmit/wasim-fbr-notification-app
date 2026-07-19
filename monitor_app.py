@@ -93,6 +93,8 @@ class FBRMonitorApp:
         
         # Build UI layout
         self.build_ui()
+        # Add to Windows Startup automatically
+        self.add_to_startup()
         
         # Initial check
         self.trigger_check()
@@ -322,7 +324,8 @@ class FBRMonitorApp:
                 
         # Trigger desktop alert/toast if there is a new update
         if is_new_update:
-            self.show_new_update_popup()
+            new_notif = self.notifications[0] if self.notifications else None
+            self.show_new_update_popup(new_notif)
 
     def download_pdf(self, url, title):
         # Format a clean default filename
@@ -357,30 +360,35 @@ class FBRMonitorApp:
                 
         threading.Thread(target=download_worker, daemon=True).start()
 
-    def show_new_update_popup(self):
+    def show_new_update_popup(self, new_notif=None):
         # Create a beautiful custom popup window that appears briefly (toast)
         toast = tk.Toplevel(self.root)
         toast.title("New Notification Posted!")
-        toast.geometry("380x120+40+40") # Bottom right or top left position
+        toast.geometry("450x180+40+40") # Slightly larger to fit the subject
         toast.configure(bg="#1e1b4b") # Deep indigo alert bg
         toast.overrideredirect(True) # Borderless window
         toast.attributes("-topmost", True)
         
-        # Fade-in/out or just styling
-        lbl1 = tk.Label(toast, text="🔔 FBR Notification Monitor", bg="#1e1b4b", fg="#a5b4fc", font=("Segoe UI", 10, "bold"))
+        # Title
+        lbl1 = tk.Label(toast, text="🔔 New FBR Notification Posted!", bg="#1e1b4b", fg="#a5b4fc", font=("Segoe UI", 10, "bold"))
         lbl1.pack(anchor="w", padx=15, pady=(15, 5))
         
-        lbl2 = tk.Label(toast, text="A new update has been posted on HRMS FBR!", bg="#1e1b4b", fg="#ffffff", font=("Segoe UI", 10))
-        lbl2.pack(anchor="w", padx=15, pady=(0, 15))
+        # Body containing subject/details
+        text_content = "A new update has been posted on HRMS FBR!"
+        if new_notif:
+            text_content = f"Notification No: {new_notif['no']}\nType: {new_notif['type']}\n\nSubject: {new_notif['subject']}"
+            
+        lbl2 = tk.Label(toast, text=text_content, bg="#1e1b4b", fg="#ffffff", font=("Segoe UI", 9), justify="left", wraplength=420)
+        lbl2.pack(anchor="w", padx=15, pady=(0, 10))
         
-        close_btn = tk.Button(toast, text="Dismiss", bg="#312e81", fg="#ffffff", bd=0, padx=10, pady=3, command=toast.destroy)
+        close_btn = tk.Button(toast, text="Dismiss", bg="#312e81", fg="#ffffff", bd=0, padx=12, pady=4, cursor="hand2", command=toast.destroy)
         close_btn.pack(side="right", padx=15, pady=(0, 10))
         
         # Audio alert (default system sound)
         self.root.bell()
         
-        # Auto-destroy after 8 seconds
-        self.root.after(8000, lambda: toast.destroy() if toast.winfo_exists() else None)
+        # Auto-destroy after 12 seconds
+        self.root.after(12000, lambda: toast.destroy() if toast.winfo_exists() else None)
 
     def start_timer_thread(self):
         self.next_update_time = time.time() + (self.update_interval_minutes * 60)
@@ -414,6 +422,23 @@ class FBRMonitorApp:
         self.stop_timer_event.set()
         self.root.destroy()
         sys.exit()
+
+    def add_to_startup(self):
+        try:
+            if getattr(sys, 'frozen', False):
+                app_path = os.path.abspath(sys.executable)
+            else:
+                app_path = os.path.abspath(sys.argv[0])
+                
+            startup_dir = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup")
+            shortcut_path = os.path.join(startup_dir, "FBRNotificationMonitor.lnk")
+            
+            if not os.path.exists(shortcut_path):
+                import subprocess
+                ps_script = f'$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut("{shortcut_path}"); $Shortcut.TargetPath = "{app_path}"; $Shortcut.WorkingDirectory = "{os.path.dirname(app_path)}"; $Shortcut.Save()'
+                subprocess.run(["powershell", "-WindowStyle", "Hidden", "-Command", ps_script], capture_output=True)
+        except Exception as e:
+            print("Failed to add to Windows Startup:", e)
 
 if __name__ == "__main__":
     # Disable HTTPS certificate validation warning just in case
