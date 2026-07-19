@@ -293,7 +293,7 @@ class FBRMonitorApp:
     def show_about_dialog(self):
         about_win = tk.Toplevel(self.root)
         about_win.title("About FBR Notification Monitor")
-        about_win.geometry("450x260")
+        about_win.geometry("450x300")
         about_win.configure(bg="#1e293b")
         about_win.resizable(False, False)
         about_win.transient(self.root)
@@ -314,10 +314,22 @@ class FBRMonitorApp:
         )
         
         info_lbl = tk.Label(about_win, text=details, bg="#1e293b", fg="#94a3b8", font=("Segoe UI", 10), justify="center")
-        info_lbl.pack(pady=10)
+        info_lbl.pack(pady=(5, 5))
+
+        # Add LinkedIn Link
+        linkedin_lbl = tk.Label(
+            about_win, 
+            text="LinkedIn: https://www.linkedin.com/in/mwasimmit/", 
+            bg="#1e293b", 
+            fg="#38bdf8", 
+            font=("Segoe UI", 9, "underline"), 
+            cursor="hand2"
+        )
+        linkedin_lbl.pack(pady=(5, 10))
+        linkedin_lbl.bind("<Button-1>", lambda e: webbrowser.open("https://www.linkedin.com/in/mwasimmit/"))
         
         btn = tk.Button(about_win, text="Close", bg="#2563eb", fg="#ffffff", font=("Segoe UI", 9, "bold"), bd=0, padx=20, pady=6, cursor="hand2", command=about_win.destroy)
-        btn.pack(pady=10)
+        btn.pack(pady=(5, 15))
 
     def on_interval_changed(self, event=None):
         val = self.interval_var.get()
