@@ -19,8 +19,8 @@ try:
 except ImportError:
     TRAY_SUPPORT = False
 
-# Helper function to dynamically generate a system tray icon
-def create_tray_icon_image():
+# Helper function to dynamically generate a system tray icon with optional badge count
+def create_tray_icon_image(count=0):
     if not TRAY_SUPPORT:
         return None
     try:
@@ -32,6 +32,19 @@ def create_tray_icon_image():
         # Draw a simple bell symbol
         dc.polygon([(32, 16), (20, 42), (44, 42)], fill=(255, 255, 255, 255))
         dc.ellipse([28, 42, 36, 50], fill=(255, 255, 255, 255))
+        # Draw badge with notification count
+        if count > 0:
+            # Red badge circle in top-right corner
+            dc.ellipse([38, 2, 62, 26], fill=(239, 68, 68, 255), outline=(255, 255, 255, 255), width=1)
+            badge_text = str(count) if count <= 9 else "9+"
+            try:
+                from PIL import ImageFont
+                font = ImageFont.truetype("arial.ttf", 13)
+            except Exception:
+                font = ImageFont.load_default()
+            bbox = dc.textbbox((0, 0), badge_text, font=font)
+            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            dc.text((50 - tw // 2, 14 - th // 2), badge_text, fill=(255, 255, 255, 255), font=font)
         return image
     except Exception:
         return None
@@ -113,6 +126,7 @@ class FBRMonitorApp:
         self.next_update_time = 0
         self.latest_seen_no = None
         self.tray_icon = None
+        self.new_notification_count = 0  # Badge count for tray icon
         
         # Configure styles
         self.setup_styles()
@@ -122,6 +136,9 @@ class FBRMonitorApp:
         
         # Build UI layout
         self.build_ui()
+        
+        # Create desktop & start menu shortcuts on first run
+        self.create_desktop_and_startmenu_shortcuts()
         
         # Initial check
         self.trigger_check()
@@ -386,7 +403,7 @@ class FBRMonitorApp:
             parser = FBRNotificationParser()
             parser.feed(html)
             
-            top_5 = parser.notifications[:5]
+            top_5 = parser.notifications[:10]
             
             # Check if there is any new update
             is_new_update = False
@@ -477,6 +494,8 @@ class FBRMonitorApp:
         # Trigger desktop alert/toast if there is a new update
         if is_new_update:
             new_notif = self.notifications[0] if self.notifications else None
+            self.new_notification_count += 1
+            self.update_tray_icon_badge()
             self.show_new_update_popup(new_notif)
 
     def download_pdf(self, url, title):
@@ -543,7 +562,7 @@ class FBRMonitorApp:
         lbl1.bind("<Button-1>", lambda e: self.restore_from_tray())
         lbl2.bind("<Button-1>", lambda e: self.restore_from_tray())
         
-        self.root.after(12000, lambda: toast.destroy() if toast.winfo_exists() else None)
+        self.root.after(30000, lambda: toast.destroy() if toast.winfo_exists() else None)
 
     def on_minimize(self, event=None):
         # Trigger tray minimization only if minimized state is active
@@ -562,7 +581,7 @@ class FBRMonitorApp:
         if self.tray_icon:
             return
             
-        image = create_tray_icon_image()
+        image = create_tray_icon_image(self.new_notification_count)
         if not image:
             return
             
@@ -572,7 +591,10 @@ class FBRMonitorApp:
             item('Check Now', lambda: self.root.after(0, self.trigger_check)),
             item('Exit App', lambda: self.exit_app())
         )
-        self.tray_icon = pystray.Icon("fbrmonitor", image, "FBR Notification Monitor", menu)
+        tooltip = "FBR Notification Monitor"
+        if self.new_notification_count > 0:
+            tooltip = f"FBR Monitor - {self.new_notification_count} new notification(s)"
+        self.tray_icon = pystray.Icon("fbrmonitor", image, tooltip, menu)
 
     def minimize_to_tray(self):
         if not TRAY_SUPPORT:
@@ -584,7 +606,20 @@ class FBRMonitorApp:
         if self.tray_icon:
             threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
+    def update_tray_icon_badge(self):
+        """Update the tray icon image to reflect the current notification count."""
+        if TRAY_SUPPORT and self.tray_icon:
+            new_image = create_tray_icon_image(self.new_notification_count)
+            if new_image:
+                self.tray_icon.icon = new_image
+                if self.new_notification_count > 0:
+                    self.tray_icon.title = f"FBR Monitor - {self.new_notification_count} new notification(s)"
+                else:
+                    self.tray_icon.title = "FBR Notification Monitor"
+
     def restore_from_tray(self, icon=None):
+        # Reset notification count when app is opened
+        self.new_notification_count = 0
         if TRAY_SUPPORT and self.tray_icon:
             self.tray_icon.stop()
             self.tray_icon = None
@@ -615,20 +650,55 @@ class FBRMonitorApp:
             
             self.stop_timer_event.wait(1.0)
 
+    def _get_app_path(self):
+        """Return the absolute path to the running executable or script."""
+        if getattr(sys, 'frozen', False):
+            return os.path.abspath(sys.executable)
+        return os.path.abspath(sys.argv[0])
+
+    def _create_shortcut(self, shortcut_path, app_path, description="FBR Notification Monitor"):
+        """Create a Windows .lnk shortcut using PowerShell/WScript.Shell."""
+        import subprocess
+        ps_script = (
+            f'$WshShell = New-Object -ComObject WScript.Shell; '
+            f'$Shortcut = $WshShell.CreateShortcut("{shortcut_path}"); '
+            f'$Shortcut.TargetPath = "{app_path}"; '
+            f'$Shortcut.WorkingDirectory = "{os.path.dirname(app_path)}"; '
+            f'$Shortcut.Description = "{description}"; '
+            f'$Shortcut.Save()'
+        )
+        subprocess.run(["powershell", "-WindowStyle", "Hidden", "-Command", ps_script], capture_output=True)
+
+    def create_desktop_and_startmenu_shortcuts(self):
+        """Create Desktop and Start Menu shortcuts on first run so the user can launch the app manually."""
+        try:
+            app_path = self._get_app_path()
+            shortcut_name = "FBR Notification Monitor.lnk"
+
+            # Desktop shortcut
+            desktop_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+            desktop_shortcut = os.path.join(desktop_dir, shortcut_name)
+            if not os.path.exists(desktop_shortcut):
+                self._create_shortcut(desktop_shortcut, app_path)
+
+            # Start Menu shortcut (user-level Programs folder)
+            start_menu_dir = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs")
+            start_menu_shortcut = os.path.join(start_menu_dir, shortcut_name)
+            if not os.path.exists(start_menu_shortcut):
+                self._create_shortcut(start_menu_shortcut, app_path)
+
+        except Exception:
+            pass  # Non-critical — don't block the app
+
     def add_to_startup(self):
         try:
-            if getattr(sys, 'frozen', False):
-                app_path = os.path.abspath(sys.executable)
-            else:
-                app_path = os.path.abspath(sys.argv[0])
+            app_path = self._get_app_path()
                 
             startup_dir = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup")
             shortcut_path = os.path.join(startup_dir, "FBRNotificationMonitor.lnk")
             
             if not os.path.exists(shortcut_path):
-                import subprocess
-                ps_script = f'$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut("{shortcut_path}"); $Shortcut.TargetPath = "{app_path}"; $Shortcut.WorkingDirectory = "{os.path.dirname(app_path)}"; $Shortcut.Save()'
-                subprocess.run(["powershell", "-WindowStyle", "Hidden", "-Command", ps_script], capture_output=True)
+                self._create_shortcut(shortcut_path, app_path)
                 self.status_label.config(text="Status: Added to Windows Startup successfully")
         except Exception as e:
             self.status_label.config(text="Status: Failed to register Windows Startup")
