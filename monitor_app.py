@@ -111,7 +111,7 @@ class FBRNotificationParser(HTMLParser):
 class FBRMonitorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("FBR Notification Monitor")
+        self.root.title("FBR Transfer Posting Notifications Monitor")
         self.root.geometry("880x660")
         self.root.minsize(780, 520)
         self.root.configure(bg="#0f172a") # Sleek dark background
@@ -150,6 +150,30 @@ class FBRMonitorApp:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close_clicked)
         self.root.bind("<Unmap>", self.on_minimize)
 
+        # Listen for the single-instance bring-to-front broadcast (WM_USER_SHOW = 0x8001)
+        # This is sent by a second-instance attempt so we surface the running window.
+        try:
+            import ctypes
+            WM_USER_SHOW = 0x8001
+            # Tkinter's after loop will check for this every 500 ms via our poll
+            self._poll_single_instance()
+        except Exception:
+            pass
+
+    def _poll_single_instance(self):
+        """Poll for WM_USER_SHOW every 500ms to surface the window if a second instance was launched."""
+        try:
+            import ctypes
+            WM_USER_SHOW = 0x8001
+            msg = ctypes.wintypes.MSG()
+            # Peek without removing; just check if the message exists
+            PM_NOREMOVE = 0x0000
+            if ctypes.windll.user32.PeekMessageW(ctypes.byref(msg), None, WM_USER_SHOW, WM_USER_SHOW, PM_NOREMOVE):
+                self.restore_from_tray()
+        except Exception:
+            pass
+        self.root.after(500, self._poll_single_instance)
+
     def setup_menu(self):
         menu_bar = tk.Menu(self.root)
         self.root.config(menu=menu_bar)
@@ -182,8 +206,18 @@ class FBRMonitorApp:
         style.configure("Primary.TButton", background="#2563eb", foreground="#ffffff", borderwidth=0, font=("Segoe UI", 10, "bold"), padding=8)
         style.map("Primary.TButton", background=[("active", "#1d4ed8"), ("pressed", "#1e40af")])
         
-        # OptionMenu/Combobox
-        style.configure("TCombobox", fieldbackground="#1e293b", background="#334155", foreground="#f8fafc", font=("Segoe UI", 10))
+        # OptionMenu/Combobox — use bright foreground so text is clearly visible
+        style.configure("TCombobox",
+                        fieldbackground="#1e293b",
+                        background="#38bdf8",
+                        foreground="#f8fafc",
+                        selectforeground="#f8fafc",
+                        selectbackground="#2563eb",
+                        font=("Segoe UI", 10))
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", "#1e293b")],
+                  foreground=[("readonly", "#f8fafc")],
+                  background=[("readonly", "#38bdf8"), ("active", "#7dd3fc")])
 
     def build_ui(self):
         # --- Top Header Panel ---
@@ -191,10 +225,10 @@ class FBRMonitorApp:
         header_frame.pack(fill="x", side="top")
         
         # App Info
-        title_label = ttk.Label(header_frame, text="FBR E-Posting Notification Monitor", style="Title.TLabel")
+        title_label = ttk.Label(header_frame, text="FBR Transfer Posting Notifications Monitor", style="Title.TLabel")
         title_label.pack(anchor="w")
         
-        subtitle_label = ttk.Label(header_frame, text="Monitors real-time notification postings and PDF announcements", style="Subtitle.TLabel")
+        subtitle_label = ttk.Label(header_frame, text="Monitor real-time FBR Admin Notifications", style="Subtitle.TLabel")
         subtitle_label.pack(anchor="w", pady=(2, 10))
         
         # Control Panel
@@ -284,8 +318,8 @@ class FBRMonitorApp:
         self.status_label = ttk.Label(status_bar, text="Status: Ready", style="Status.TLabel")
         self.status_label.pack(side="left")
         
-        # Link to source page
-        source_label = ttk.Label(status_bar, text="Source Page (HRMS FBR)", foreground="#38bdf8", cursor="hand2", font=("Segoe UI", 9, "underline"))
+        # Link to source page — bright white-cyan for maximum visibility
+        source_label = ttk.Label(status_bar, text="🔗 Source Page (HRMS FBR)", foreground="#7dd3fc", cursor="hand2", font=("Segoe UI", 9, "underline bold"))
         source_label.pack(side="right")
         source_label.bind("<Button-1>", lambda e: webbrowser.open("https://hrms.fbr.gov.pk/eposting/Proposal/SearchNotification.aspx?view=ExternalLink"))
 
@@ -327,7 +361,7 @@ class FBRMonitorApp:
             "Email: mwasimmit@gmail.com\n\n"
             "About the Developer:\n"
             "I am a hobbyist developer who built this app\n"
-            "out of fun and curiosity to track official postings."
+            "out of fun."
         )
         
         info_lbl = tk.Label(about_win, text=details, bg="#1e293b", fg="#94a3b8", font=("Segoe UI", 10), justify="center")
@@ -534,34 +568,49 @@ class FBRMonitorApp:
         # Create a beautiful custom popup window that appears briefly (toast)
         toast = tk.Toplevel(self.root)
         toast.title("New Notification Posted!")
-        toast.geometry("450x180+40+40") 
-        toast.configure(bg="#1e1b4b") 
-        toast.overrideredirect(True) 
+        toast.geometry("470x200+40+40")
+        toast.configure(bg="#1e1b4b")
+        toast.overrideredirect(True)
         toast.attributes("-topmost", True)
-        
+
         # Title
         lbl1 = tk.Label(toast, text="🔔 New FBR Notification Posted!", bg="#1e1b4b", fg="#a5b4fc", font=("Segoe UI", 10, "bold"))
         lbl1.pack(anchor="w", padx=15, pady=(15, 5))
-        
+
         # Body containing subject/details
         text_content = "A new update has been posted on HRMS FBR!"
         if new_notif:
             text_content = f"Notification No: {new_notif['no']}\nType: {new_notif['type']}\n\nSubject: {new_notif['subject']}"
-            
-        lbl2 = tk.Label(toast, text=text_content, bg="#1e1b4b", fg="#ffffff", font=("Segoe UI", 9), justify="left", wraplength=420)
+
+        lbl2 = tk.Label(toast, text=text_content, bg="#1e1b4b", fg="#ffffff", font=("Segoe UI", 9), justify="left", wraplength=440)
         lbl2.pack(anchor="w", padx=15, pady=(0, 10))
-        
-        close_btn = tk.Button(toast, text="Dismiss", bg="#312e81", fg="#ffffff", bd=0, padx=12, pady=4, cursor="hand2", command=toast.destroy)
-        close_btn.pack(side="right", padx=15, pady=(0, 10))
-        
+
+        # Button row
+        btn_frame = tk.Frame(toast, bg="#1e1b4b")
+        btn_frame.pack(fill="x", padx=15, pady=(0, 12))
+
+        # "Dismiss" — closes only the popup toast, does NOT open the app
+        dismiss_btn = tk.Button(
+            btn_frame, text="✖ Dismiss",
+            bg="#4c1d95", fg="#ffffff", bd=0, padx=14, pady=5,
+            cursor="hand2",
+            command=toast.destroy
+        )
+        dismiss_btn.pack(side="right", padx=(5, 0))
+
+        # "Open App" — restores the main app window
+        open_btn = tk.Button(
+            btn_frame, text="🖥 Open App",
+            bg="#2563eb", fg="#ffffff", bd=0, padx=14, pady=5,
+            cursor="hand2",
+            command=lambda: (toast.destroy(), self.restore_from_tray())
+        )
+        open_btn.pack(side="right", padx=(5, 0))
+
         # Audio alert
         self.root.bell()
-        
-        # Make the popup actionable - Click to restore app
-        toast.bind("<Button-1>", lambda e: self.restore_from_tray())
-        lbl1.bind("<Button-1>", lambda e: self.restore_from_tray())
-        lbl2.bind("<Button-1>", lambda e: self.restore_from_tray())
-        
+
+        # Auto-dismiss after 30 seconds
         self.root.after(30000, lambda: toast.destroy() if toast.winfo_exists() else None)
 
     def on_minimize(self, event=None):
@@ -711,13 +760,30 @@ class FBRMonitorApp:
         sys.exit()
 
 if __name__ == "__main__":
+    # ── Single-instance guard ──────────────────────────────────────────────
+    # Create a named Windows mutex. If it already exists another instance is
+    # running; bring that window to the foreground and exit this new process.
+    import ctypes
+    _MUTEX_NAME = "Global\\FBRNotificationMonitor_SingleInstance"
+    _mutex = ctypes.windll.kernel32.CreateMutexW(None, False, _MUTEX_NAME)
+    _last_err = ctypes.windll.kernel32.GetLastError()
+    ERROR_ALREADY_EXISTS = 183
+    if _last_err == ERROR_ALREADY_EXISTS:
+        # Another instance is running – try to bring it to the foreground
+        import ctypes.wintypes
+        HWND_BROADCAST = 0xFFFF
+        WM_USER_SHOW = 0x8001  # Custom message; the running instance listens for it
+        ctypes.windll.user32.PostMessageW(HWND_BROADCAST, WM_USER_SHOW, 0, 0)
+        sys.exit(0)
+    # ──────────────────────────────────────────────────────────────────────
+
     try:
         _create_unverified_https_context = ssl._create_unverified_context
     except AttributeError:
         pass
     else:
         ssl._create_default_https_context = _create_unverified_https_context
-        
+
     root = tk.Tk()
     app = FBRMonitorApp(root)
     root.mainloop()
